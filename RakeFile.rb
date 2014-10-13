@@ -6,7 +6,7 @@ require "rexml/document"
 require "open-uri"
 include REXML
 
-SOLUTION_PATH = 'xunit.sln'
+SOLUTION_PATH = 'xunit-NoXamarin.sln'
 SOLUTION_DIR = 'src'
 DEFAULT_CONFIG = 'Release'
 PARALLELIZE_TESTS = true
@@ -31,8 +31,6 @@ def regexReplace(file_path)
 	File.open(file_path, 'w') do |out|
 	  out << outdata
 	end
-	#path = "<OutputPath>bin\\Debug\</OutputPath>"
-	#puts path.gsub /<OutputPath>bin\\(\w+)<\/OutputPath>/, '<OutputPath>bin\\\\\1.x86\\</OutputPath>'
 end
 
 module Platform
@@ -149,19 +147,29 @@ end
 namespace :build do
 	desc "Prepares for build"
 	task :prepare do 
-		project_name = 'xunit_console'
+		puts 'Preparing to build...'
+		project_name = 'xunit.console'
 		config_section_name = 'Xunit.ConsoleClient.XunitConsoleConfigurationSection'
-		source_project_file = "src/#{project_name}/#{project_name}.csproj"
+		source_project_file = File.join(Dir.pwd, "src/#{project_name}/#{project_name}.csproj")
 		target_project_file = source_project_file.sub('.csproj', '.x86.csproj')
 
 		FileUtils.cp(source_project_file, target_project_file)
 		fileReplace(target_project_file, "<AssemblyName>#{project_name}</AssemblyName>", "<AssemblyName>#{project_name}.x86</AssemblyName>")
 		regexReplace(target_project_file)
+		puts 'Prepared fine.'
+	end
 
+	task :cleanup do
+		puts 'Cleaning up after build...'
 		fileReplace("src/#{project_name}/bin/#{DEFAULT_CONFIG}.x86/#{project_name}.x86.exe.config",  
 			"#{config_section_name}, #{project_name}",
         	"#{config_section_name}, #{project_name}.x86")
     	FileUtils.rm("src/#{project_name}/#{project_name}.x86.csproj")
+    	puts 'Clean up fine.'
+	end
+
+	task :ms_full => ['nuget:all', :prepare, :ms, :test_project, :cleanup] do
+		puts "Finished building"
 	end
 
 	desc "Builds solution with MSBuild"
@@ -169,7 +177,7 @@ namespace :build do
 		build.solution = SOLUTION_PATH
 		build.targets = [:Build]
 		build.properties = {
-			:Configuration => args.config, 
+			:Configuration => DEFAULT_CONFIG, 
 			:TrackFileAccess => TRACK_FILE_ACCESS
 		}
 		build.verbosity = :minimal
@@ -180,7 +188,7 @@ namespace :build do
 		build.solution = 'src/xunit.console/xunit.console.x86.csproj'
 		build.targets = [:Build]
 		build.properties = {
-			:PlatformTarget = :x86,
+			:PlatformTarget => :x86,
 			:Configuration => args.config, 
 			:TrackFileAccess => TRACK_FILE_ACCESS
 		}
@@ -201,7 +209,7 @@ namespace :build do
 		if(Platform.is_nix)
 			task_name += 'mono'
 		else
-			task_name += 'ms'
+			task_name += 'ms_full'
 		end
 		Rake::Task[task_name].reenable
 		Rake::Task[task_name].invoke(args.config)
@@ -236,4 +244,3 @@ zip :pack do |cmd|
 end
 
 task :default => ['build:choose']
-#task :default => [:replace]
