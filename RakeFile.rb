@@ -5,6 +5,7 @@ require "json"
 require "rexml/document"
 require "open-uri"
 include REXML
+require 'rbconfig'
 
 SOLUTION_PATH = 'xunit-NoWpa.sln'
 SOLUTION_DIR = 'src'
@@ -224,15 +225,22 @@ namespace :build do
 end
 
 namespace :tests do
-	desc "Runs unit tests"
-	xunit :unit => 'build:choose' do |xu, args|
+	exec :xunit, [:command, :assembly, :output_dir] do |cmd, args|
+		cmd.command = args[:command]
+		cmd.parameters = ["#{args[:assembly]}", "-html #{args[:output_dir]}"]
+	end
+
+	task :unit do |t, args|
 		args.with_defaults(:config => DEFAULT_CONFIG)
-		project_name = "CurrencyRates.Services.UnitTests"
-		report_dir = "XUnitResults"
-		xu.command = "tools/xunit/xunit.console.clr4.exe"
-		xu.assembly = "src/#{project_name}/bin/#{args[:config]}/#{project_name}.dll"
-		Dir.mkdir(report_dir) unless File.exists?(report_dir)
-		xu.html_output = report_dir
+		assembly_files = Rake::FileList["test/test.xunit*/bin/#{args[:config]}/test.xunit*.dll"].exclude("**/*.xunit1.dll")
+		assembly_files.each do |name|
+			puts "Processing #{name}..."
+			command = "src/xunit.console/bin/#{args[:config]}/xunit.console.exe"
+	      	assembly = name
+	      	output_dir = File.join(Dir.pwd, "TestResults-#{File.basename(name)}.html")
+		  	Rake::Task["tests:xunit"].reenable
+			Rake::Task["tests:xunit"].invoke(command, assembly, output_dir)
+		end
 	end
 end
 
@@ -250,4 +258,4 @@ zip :pack do |cmd|
 	cmd.exclusions = [/\.xml$/, /\.pdb$/, /\.nlp$/]
 end
 
-task :default => ['build:choose']
+task :default => ['build:choose', 'tests:unit']
