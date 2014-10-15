@@ -6,7 +6,7 @@ require "rexml/document"
 require "open-uri"
 include REXML
 
-SOLUTION_PATH = 'xunit-NoXamarin.sln'
+SOLUTION_PATH = 'xunit-NoWpa.sln'
 SOLUTION_DIR = 'src'
 DEFAULT_CONFIG = 'Release'
 PARALLELIZE_TESTS = true
@@ -96,6 +96,7 @@ namespace :nuget do
 
 	desc "Downloads missing Nuget packages"
 	task :restore do
+		puts "Downloading missing NuGet packages..."
 		commands = [
 			"install xunit.buildtasks -Source \"#{PACKAGE_SOURCES}\" -SolutionDirectory #{SOLUTION_DIR} -Verbosity quiet -ExcludeVersion",
 			"install githublink -Pre -Source \"#{PACKAGE_SOURCES.split(';')[1]}\" -SolutionDirectory #{SOLUTION_DIR} -Verbosity quiet -ExcludeVersion",
@@ -104,9 +105,8 @@ namespace :nuget do
 
 		commands.each do |cmd|
 			wrapped_command = Platform.runtime("#{NUGET_PATH} " + cmd)
-			puts 'Running nuget with ' + wrapped_command
 			result = `#{wrapped_command}`
-			puts result
+			puts result unless result.length < 1
 		end
 	end
 
@@ -116,7 +116,7 @@ namespace :nuget do
 		project_files = Rake::FileList['**/*.csproj']
 		error_count = 0
 		project_files.each do |pf|
-			puts "Checking project file #{pf}..."
+			#puts "Checking project file #{pf}..."
 			File.open(pf) do |f|
 				doc = Document.new(f)	  
 				packages_paths = XPath.match(doc, "//Reference/HintPath").map{|x| x.text}
@@ -148,6 +148,7 @@ namespace :build do
 	desc "Prepares for build"
 	task :prepare do 
 		puts 'Preparing to build...'
+
 		project_name = 'xunit.console'
 		config_section_name = 'Xunit.ConsoleClient.XunitConsoleConfigurationSection'
 		source_project_file = File.join(Dir.pwd, "src/#{project_name}/#{project_name}.csproj")
@@ -161,7 +162,13 @@ namespace :build do
 
 	task :cleanup do
 		puts 'Cleaning up after build...'
-		fileReplace("src/#{project_name}/bin/#{DEFAULT_CONFIG}.x86/#{project_name}.x86.exe.config",  
+
+		project_name = 'xunit.console'
+		config_section_name = 'Xunit.ConsoleClient.XunitConsoleConfigurationSection'
+		source_project_file = File.join(Dir.pwd, "src/#{project_name}/#{project_name}.csproj")
+		target_project_file = source_project_file.sub('.csproj', '.x86.csproj')
+
+		fileReplace("src/#{project_name}/bin/#{DEFAULT_CONFIG}/#{project_name}.x86.exe.config",  
 			"#{config_section_name}, #{project_name}",
         	"#{config_section_name}, #{project_name}.x86")
     	FileUtils.rm("src/#{project_name}/#{project_name}.x86.csproj")
@@ -189,7 +196,7 @@ namespace :build do
 		build.targets = [:Build]
 		build.properties = {
 			:PlatformTarget => :x86,
-			:Configuration => args.config, 
+			:Configuration => DEFAULT_CONFIG, 
 			:TrackFileAccess => TRACK_FILE_ACCESS
 		}
 		build.verbosity = :minimal
