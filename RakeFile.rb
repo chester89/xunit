@@ -34,6 +34,11 @@ def regexReplace(file_path)
 	end
 end
 
+def architecture()
+	RbConfig::CONFIG["arch"].split('-')[0] #will return x64 or x86
+end
+
+
 module Platform
   def self.is_nix
     !RUBY_PLATFORM.match("linux|darwin").nil?
@@ -53,18 +58,23 @@ module Platform
   end
 end 
 
-desc "Replaces"
-task :replace do
-	fileReplace('src/xunit.console/xunit.console.csproj', "<AssemblyName>xunit.console</AssemblyName>", "<AssemblyName>xunit.console.x86</AssemblyName>")	
-end
-
 desc "Increments the file and assembly version"
 assemblyinfo :version => 'vrsn:build_increment' do |cmd|
-	app_details = BuildProcess.app_details
+	#<Target Name="SetVersionNumber">
+    #<RegexReplace
+        #Pattern='AssemblyVersion\("99\.99\.99\.0"\)'
+        #Replacement='AssemblyVersion("$(BuildAssemblyVersion)")'
+        #Files='src\common\GlobalAssemblyInfo.cs'
+        #Condition=" '$(BuildAssemblyVersion)' != '' "/>
+    #<RegexReplace
+        #Pattern='99\.99\.99'
+        #Replacement='$(BuildSemanticVersion)'
+        #Files='@(NuspecFiles)'
+        #Condition=" '$(BuildSemanticVersion)' != '' "/>
+  #</Target>
+
+
 	commit_hash = `git log -1 --format="%H%"`
-	
-	#cmd.version = cmd.file_version = ?
-	puts "set version to #{cmd.version}"
 	
 	cmd.title = app_details['title']
 	cmd.description = commit_hash[0..(commit_hash.length - 3)]
@@ -173,7 +183,7 @@ namespace :build do
 			"#{config_section_name}, #{project_name}",
         	"#{config_section_name}, #{project_name}.x86")
     	FileUtils.rm("src/#{project_name}/#{project_name}.x86.csproj")
-    	puts 'Clean up fine.'
+    	puts 'Cleaned up fine.'
 	end
 
 	task :ms_full => ['nuget:all', :prepare, :ms, :test_project, :cleanup] do
@@ -225,21 +235,37 @@ namespace :build do
 end
 
 namespace :tests do
-	exec :xunit, [:command, :assembly, :output_dir] do |cmd, args|
+	exec :xunit, [:command, :assembly, :output_file, :parallel_mode, :max_threads] do |cmd, args|
 		cmd.command = args[:command]
-		cmd.parameters = ["#{args[:assembly]}", "-html #{args[:output_dir]}"]
+		cmd.parameters = ["#{args[:assembly]}", "-html #{args[:output_file]}.html", "-xml #{args[:output_file].xml}"]
 	end
 
 	task :unit do |t, args|
 		args.with_defaults(:config => DEFAULT_CONFIG)
-		assembly_files = Rake::FileList["test/test.xunit*/bin/#{args[:config]}/test.xunit*.dll"].exclude("**/*.xunit1.dll")
-		assembly_files.each do |name|
-			puts "Processing #{name}..."
+
+		run_tests = -> (file, output_file, parallel_mode, max_threads) { 			
+			puts "Processing #{file}..."
 			command = "src/xunit.console/bin/#{args[:config]}/xunit.console.exe"
-	      	assembly = name
-	      	output_dir = File.join(Dir.pwd, "TestResults-#{File.basename(name)}.html")
+	      	assembly = file
 		  	Rake::Task["tests:xunit"].reenable
-			Rake::Task["tests:xunit"].invoke(command, assembly, output_dir)
+			Rake::Task["tests:xunit"].invoke(command, assembly, output_file, parallel_mode, max_threads) 
+		}
+
+		path_template = "test/test.xunit%s/bin/#{args[:config]}/test.xunit%s.dll"
+		result_file_name_template = "TestResults-%s%s%s"
+		assembly_files = Rake::FileList[path_template % ['*', '*']].exclude("**/*.xunit1.dll")
+		assembly_files.each do |assembly|
+			run_tests.call(assembly, 
+				File.join(Dir.pwd, result_file_name_template % ['', File.basename(assembly), architecture()]), 
+				'collections'
+				)
+		end
+		v1_files = Rake::FileList[path_template % ['1', '1']]
+		v1_files.each do |assembly|
+			run_tests.call(assembly, 
+				File.join(Dir.pwd, result_file_name_template % ['v1-', File.basename(assembly), architecture()]),
+				'collections'
+				)
 		end
 	end
 end
