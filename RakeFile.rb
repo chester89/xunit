@@ -73,7 +73,6 @@ assemblyinfo :version => 'vrsn:build_increment' do |cmd|
         #Condition=" '$(BuildSemanticVersion)' != '' "/>
   #</Target>
 
-
 	commit_hash = `git log -1 --format="%H%"`
 	
 	cmd.title = app_details['title']
@@ -237,11 +236,12 @@ end
 namespace :tests do
 	exec :xunit, [:command, :assembly, :output_file, :parallel_mode, :max_threads] do |cmd, args|
 		cmd.command = args[:command]
-		cmd.parameters = ["#{args[:assembly]}", "-html #{args[:output_file]}.html", "-xml #{args[:output_file].xml}"]
+		cmd.parameters = ["#{args[:assembly]}", "-html #{args[:output_file]}.html", "-xml #{args[:output_file]}.xml"]
 	end
 
 	task :unit do |t, args|
 		args.with_defaults(:config => DEFAULT_CONFIG)
+		max_thread_count = 1
 
 		run_tests = -> (file, output_file, parallel_mode, max_threads) { 			
 			puts "Processing #{file}..."
@@ -251,37 +251,26 @@ namespace :tests do
 			Rake::Task["tests:xunit"].invoke(command, assembly, output_file, parallel_mode, max_threads) 
 		}
 
-		path_template = "test/test.xunit%s/bin/#{args[:config]}/test.xunit%s.dll"
+		path_template_for_v1 = "test/test.xunit%s/bin/#{args[:config]}/test.xunit%s.dll"
+		path_template_for_v2 = "test/test.xunit%s/bin/#{args[:config]}/test.xunit.dll"
 		result_file_name_template = "TestResults-%s%s%s"
-		assembly_files = Rake::FileList[path_template % ['*', '*']].exclude("**/*.xunit1.dll")
+		assembly_files = Rake::FileList[path_template_for_v2 % ['*']].exclude("**/*.xunit1.dll")
 		assembly_files.each do |assembly|
 			run_tests.call(assembly, 
 				File.join(Dir.pwd, result_file_name_template % ['', File.basename(assembly), architecture()]), 
-				'collections'
+				'collections', 
+				max_thread_count
 				)
 		end
-		v1_files = Rake::FileList[path_template % ['1', '1']]
+		v1_files = Rake::FileList[path_template_for_v1 % ['1', '1']]
 		v1_files.each do |assembly|
 			run_tests.call(assembly, 
 				File.join(Dir.pwd, result_file_name_template % ['v1-', File.basename(assembly), architecture()]),
-				'collections'
+				'collections',
+				max_thread_count
 				)
 		end
 	end
-end
-
-desc "Packages the app"
-zip :pack do |cmd|
-	app_details = BuildProcess.app_details
-	out_dir = "artifacts"
-	short_commit_hash = `git log --pretty=format:'%h' -n 1`
-	pure_hash = short_commit_hash[1..(short_commit_hash.length - 2)]
-	cmd.directories_to_zip = ["src/Scheduler/bin/Release/"]
-	cmd.additional_files = [VERSION_FILE_NAME]
-	Dir.mkdir(out_dir) unless File.exists?(out_dir)
-	cmd.output_file = "../../../../#{out_dir}/#{app_details['product']}-#{BuildProcess.full_version_number}-#{pure_hash}.zip"
-	cmd.flatten_zip
-	cmd.exclusions = [/\.xml$/, /\.pdb$/, /\.nlp$/]
 end
 
 task :default => ['build:choose', 'tests:unit']
