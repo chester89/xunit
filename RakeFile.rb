@@ -17,6 +17,7 @@ TRACK_FILE_ACCESS = false
 
 NUGET_PATH = '.nuget/NuGet.exe'
 PACKAGE_SOURCES = 'https://nuget.org/api/v2;http://www.myget.org/F/b4ff5f68eccf4f6bbfed74f055f88d8f'
+TEST_RESULTS_DIR = 'TestResults'
 
 def fileReplace(file_path, old, replacement)
 	outdata = File.read(file_path).gsub(old, replacement)
@@ -236,12 +237,16 @@ end
 namespace :tests do
 	exec :xunit, [:command, :assembly, :output_file, :parallel_mode, :max_threads] do |cmd, args|
 		cmd.command = args[:command]
-		cmd.parameters = ["#{args[:assembly]}", "-html #{args[:output_file]}.html", "-xml #{args[:output_file]}.xml"]
+		cmd.parameters = ["#{args[:assembly]}", "-xml #{args[:output_file]}.xml"]
 	end
 
 	task :unit do |t, args|
 		args.with_defaults(:config => DEFAULT_CONFIG)
 		max_thread_count = 1
+		parallel_mode = 'collections'
+
+		FileUtils.mkdir(TEST_RESULTS_DIR) unless File.exists?(TEST_RESULTS_DIR)
+		FileUtils.rm Dir.glob('*.*ml')
 
 		run_tests = -> (file, output_file, parallel_mode, max_threads) { 			
 			puts "Processing #{file}..."
@@ -251,22 +256,21 @@ namespace :tests do
 			Rake::Task["tests:xunit"].invoke(command, assembly, output_file, parallel_mode, max_threads) 
 		}
 
-		path_template_for_v1 = "test/test.xunit%s/bin/#{args[:config]}/test.xunit%s.dll"
-		path_template_for_v2 = "test/test.xunit%s/bin/#{args[:config]}/test.xunit.dll"
-		result_file_name_template = "TestResults-%s%s%s"
-		assembly_files = Rake::FileList[path_template_for_v2 % ['*']].exclude("**/*.xunit1.dll")
+		path_template = "test/test.xunit%s/bin/#{args[:config]}/test.xunit%s.dll"
+		result_file_name_template = "#{TEST_RESULTS_DIR}/%s%s.%s"
+		assembly_files = Rake::FileList[path_template % ['*', '*']].exclude("**/*.xunit1.dll")
 		assembly_files.each do |assembly|
 			run_tests.call(assembly, 
 				File.join(Dir.pwd, result_file_name_template % ['', File.basename(assembly), architecture()]), 
-				'collections', 
+				parallel_mode, 
 				max_thread_count
 				)
 		end
-		v1_files = Rake::FileList[path_template_for_v1 % ['1', '1']]
+		v1_files = Rake::FileList[path_template % ['1', '1']]
 		v1_files.each do |assembly|
 			run_tests.call(assembly, 
 				File.join(Dir.pwd, result_file_name_template % ['v1-', File.basename(assembly), architecture()]),
-				'collections',
+				parallel_mode,
 				max_thread_count
 				)
 		end
