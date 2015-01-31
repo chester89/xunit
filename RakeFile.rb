@@ -35,11 +35,6 @@ def regexReplace(file_path)
 	end
 end
 
-def architecture()
-	RbConfig::CONFIG["arch"].split('-')[0] #will return x64 or x86
-end
-
-
 module Platform
   def self.is_nix
     !RUBY_PLATFORM.match("linux|darwin").nil?
@@ -127,7 +122,6 @@ namespace :nuget do
 		project_files = Rake::FileList['**/*.csproj']
 		error_count = 0
 		project_files.each do |pf|
-			#puts "Checking project file #{pf}..."
 			File.open(pf) do |f|
 				doc = Document.new(f)	  
 				packages_paths = XPath.match(doc, "//Reference/HintPath").map{|x| x.text}
@@ -158,8 +152,6 @@ end
 namespace :build do
 	desc "Prepares for build"
 	task :prepare do 
-		puts 'Preparing to build...'
-
 		project_name = 'xunit.console'
 		config_section_name = 'Xunit.ConsoleClient.XunitConsoleConfigurationSection'
 		source_project_file = File.join(Dir.pwd, "src/#{project_name}/#{project_name}.csproj")
@@ -168,7 +160,6 @@ namespace :build do
 		FileUtils.cp(source_project_file, target_project_file)
 		fileReplace(target_project_file, "<AssemblyName>#{project_name}</AssemblyName>", "<AssemblyName>#{project_name}.x86</AssemblyName>")
 		regexReplace(target_project_file)
-		puts 'Prepared fine.'
 	end
 
 	task :cleanup do
@@ -257,11 +248,11 @@ namespace :tests do
 		}
 
 		path_template = "test/test.xunit%s/bin/#{args[:config]}/test.xunit%s.dll"
-		result_file_name_template = "#{TEST_RESULTS_DIR}/%s%s.%s"
+		result_file_name_template = "#{TEST_RESULTS_DIR}/%s"
 		assembly_files = Rake::FileList[path_template % ['*', '*']].exclude("**/*.xunit1.dll")
 		assembly_files.each do |assembly|
 			run_tests.call(assembly, 
-				File.join(Dir.pwd, result_file_name_template % ['', File.basename(assembly), architecture()]), 
+				File.join(Dir.pwd, result_file_name_template % File.basename(assembly)), 
 				parallel_mode, 
 				max_thread_count
 				)
@@ -269,7 +260,7 @@ namespace :tests do
 		v1_files = Rake::FileList[path_template % ['1', '1']]
 		v1_files.each do |assembly|
 			run_tests.call(assembly, 
-				File.join(Dir.pwd, result_file_name_template % ['v1-', File.basename(assembly), architecture()]),
+				File.join(Dir.pwd, result_file_name_template % File.basename(assembly)),
 				parallel_mode,
 				max_thread_count
 				)
