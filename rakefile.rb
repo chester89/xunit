@@ -239,7 +239,7 @@ namespace :tests do
 		FileUtils.mkdir(TEST_RESULTS_DIR) unless File.exists?(TEST_RESULTS_DIR)
 		FileUtils.rm Dir.glob('*.*ml')
 
-		run_tests = -> (file, output_file, parallel_mode, max_threads) { 			
+		run_tests = -> file, output_file, parallel_mode, max_threads { 			
 			puts "Processing #{file}..."
 			command = "src/xunit.console/bin/#{args[:config]}/xunit.console.exe"
 	      	assembly = file
