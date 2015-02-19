@@ -177,7 +177,11 @@ namespace :build do
     	puts 'Cleaned up fine.'
 	end
 
-	task :ms_full => ['nuget:all', :prepare, :ms, :test_project, :cleanup] do
+	task :ms_full => ['nuget:all', :prepare, :ms, :ms_test_project, :cleanup] do
+		puts "Finished building"
+	end
+
+	task :mono_full => ['nuget:all', :prepare, :mono, :mono_test_project, :cleanup] do
 		puts "Finished building"
 	end
 
@@ -192,8 +196,20 @@ namespace :build do
 		build.verbosity = :minimal
 	end
 
+	desc "Build test project with mono"
+	xbuild :mono_test_project, [:config] => ['nuget:all', :prepare] do |build, args|
+		build.solution = 'src/xunit.console/xunit.console.x86.csproj'
+		build.targets = [:Build]
+		build.properties = {
+			:PlatformTarget => :x86,
+			:Configuration => DEFAULT_CONFIG, 
+			:TrackFileAccess => TRACK_FILE_ACCESS
+		}
+		build.verbosity = :minimal
+	end
+
 	desc "Build test project with MSBuild"
-	msbuild :test_project, [:config] => ['nuget:all', :prepare] do |build, args|
+	msbuild :ms_test_project, [:config] => ['nuget:all', :prepare] do |build, args|
 		build.solution = 'src/xunit.console/xunit.console.x86.csproj'
 		build.targets = [:Build]
 		build.properties = {
@@ -216,7 +232,7 @@ namespace :build do
 		args.with_defaults(:config => DEFAULT_CONFIG)
 		task_name = 'build:'
 		if(Platform.is_nix)
-			task_name += 'mono'
+			task_name += 'mono_full'
 		else
 			task_name += 'ms_full'
 		end
